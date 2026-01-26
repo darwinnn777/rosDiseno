@@ -6,11 +6,16 @@ export interface ShelfLevel {
     material: MaterialType;
 }
 
-export interface ShelfConfig {
-    height: number; // Total height in cm
-    width: number; // Width between uprights in cm (110-220)
-    depth: number; // Depth in cm (40, 50, 60, 80, 100, 120)
+export interface ShelfModule {
+    id: string;
+    width: number; // Width of this specific bay
     levels: ShelfLevel[];
+}
+
+export interface ShelfConfig {
+    height: number; // Global height for the row
+    depth: number; // Global depth for the row
+    modules: ShelfModule[]; // List of connected bays
 }
 
 export interface Pricing {
