@@ -24,7 +24,7 @@ const Shelf = ({ width, depth, y, material }: { width: number, depth: number, y:
     if (material === 'None') return null;
 
     return (
-        <mesh position={[width / 2, y + 1, depth / 2]} castShadow receiveShadow>
+        <mesh position={[0, y + 1, 0]} castShadow receiveShadow>
             <boxGeometry args={[width, 2, depth]} />
             <meshStandardMaterial color={colors[material]} />
         </mesh>
@@ -42,7 +42,7 @@ const Upright = ({ height, x, z }: { height: number, x: number, z: number }) => 
 
 const Beam = ({ width, y, z }: { width: number, y: number, z: number }) => {
     return (
-        <mesh position={[width / 2, y - BEAM_HEIGHT / 2, z]} castShadow receiveShadow>
+        <mesh position={[0, y - BEAM_HEIGHT / 2, z]} castShadow receiveShadow>
             <boxGeometry args={[width, BEAM_HEIGHT, BEAM_DEPTH]} />
             <meshStandardMaterial color="#f97316" />
         </mesh>
@@ -51,84 +51,116 @@ const Beam = ({ width, y, z }: { width: number, y: number, z: number }) => {
 
 const RackModel = () => {
     const { config } = useConfig();
-    const { height, width, depth, levels } = config;
+    const { height, depth, modules } = config;
 
-    // Calculate component positions
-    // Width is total width? Or center to center?
-    // Let's assume Width means outer dimension for simplicity, or usable width.
-    // User spec: 110-220 cm. Probably usable width or outer.
-    // If we assume "width between uprights" as inner width, then total width is width + 2*UPRIGHT_WIDTH.
-    // Let's assume `width` is the inner usable width, which is standard for shelves.
-    // So Uprights are at x = -UPRIGHT_WIDTH/2 and x = width + UPRIGHT_WIDTH/2 ?
-    // Let's place Left Upright at x=0 (centered at 0?)
-    // Let's center the whole rack at (0,0,0) usually.
-    // But `Viewer2D` assumed 0 to width.
-    // Let's stick to 0 to width as usable space.
-    // Left Upright center: -UPRIGHT_WIDTH/2
-    // Right Upright center: width + UPRIGHT_WIDTH/2
+    // We render modules sequentially along the X axis.
+    // Module 1 starts at 0.
+    // Module 2 starts at Module 1 Width + Upright Thickness.
 
-    const leftX = -UPRIGHT_WIDTH / 2;
-    const rightX = width + UPRIGHT_WIDTH / 2;
+    // Shared Upright Logic:
+    // A standalone bay has 2 uprights (Left, Right).
+    // A connected bay has 1 upright (Right), sharing the Left one.
+    // Or we just place uprights at the boundaries.
+    // Frame at X=0.
+    // Frame at X=Width1.
+    // Frame at X=Width1+Width2.
+    // etc.
+    // Actually, Width usually means center-to-center or clear span.
+    // Let's assume 'width' is the clear span (shelf width).
+    // So Uprights are between shelves.
+    // Frame 0 at X=0
+    // Frame 1 at X=Width1 + UPRIGHT_WIDTH
+    // Frame 2 at X=Width1 + UPRIGHT_WIDTH + Width2 + UPRIGHT_WIDTH
+    // ...
+    // Wait, let's simplify coordinates.
+    // Start X = 0.
+    // Render Left Upright at 0.
+    // Render Shelves starting at UPRIGHT_WIDTH?
+    // If we assume coordinates center at 0:
+    // Let's build from left to right starting at 0.
 
-    // Depth: Uprights are at z=0 and z=depth? Or depth is total depth.
-    // Usually depth is frame depth.
-    // Front Upright Z: depth/2
-    // Back Upright Z: -depth/2
-    // We need 4 uprights for a standalone bay.
-    // wait, "Bastidores" (Frames) consist of 2 uprights + bracing.
-    // So we need 2 Frames (Left and Right).
-    // Left Frame: Upright at (leftX, front), Upright at (leftX, back).
-
-    const frontZ = depth / 2;
-    const backZ = -depth / 2;
+    let currentX = 0;
 
     return (
         <group position={[0, 0, 0]}>
-            {/* Left Frame */}
-            <Upright height={height} x={leftX} z={frontZ} />
-            <Upright height={height} x={leftX} z={backZ} />
-            {/* TODO: Diagonal bracing for frame */}
+            {/* Initial Left Frame */}
+            <group position={[currentX, 0, 0]}>
+                <Upright height={height} x={-UPRIGHT_WIDTH / 2} z={depth / 2} />
+                <Upright height={height} x={-UPRIGHT_WIDTH / 2} z={-depth / 2} />
+            </group>
 
-            {/* Right Frame */}
-            <Upright height={height} x={rightX} z={frontZ} />
-            <Upright height={height} x={rightX} z={backZ} />
+            {modules.map((module, index) => {
+                const { width, levels } = module;
 
-            {/* Levels */}
-            {levels.map((level) => {
-                const y = level.elevation;
-                // Beams connect front-left to front-right, and back-left to back-right
-                return (
-                    <group key={level.id}>
-                        {/* Front Beam */}
-                        <Beam width={width} y={y} z={frontZ} />
-                        {/* Back Beam */}
-                        <Beam width={width} y={y} z={backZ} />
+                // Shelf center relative to module start
+                // Module start is at currentX (which is the center of the left upright of this module)
+                // Shelves start at currentX + UPRIGHT_WIDTH/2 ? No, clear span.
+                // If Left Upright is at currentX.
+                // Shelf starts at currentX + UPRIGHT_WIDTH/2?
+                // Let's assume standard shelving: Uprights have width.
+                // Space between uprights is `width`.
+                // So Right Upright is at currentX + UPRIGHT_WIDTH/2 + width + UPRIGHT_WIDTH/2?
+                // = currentX + width + UPRIGHT_WIDTH.
 
-                        {/* Shelf Surface */}
-                        <Shelf
-                            width={width}
-                            depth={depth} // Spans full depth? Usually sits on beams.
-                            y={y} // Sits on top of beam? Beam y is center of beam. Level elevation is top of beam usually.
-                            // If elevation is top of beam, then beam is at y - height/2.
-                            // Shelf sits at y + thickness/2.
-                            material={level.material}
-                        />
+                const moduleCenterX = currentX + width / 2;
 
-                        {/* Supports (Puntales) - cross bars under shelf */}
-                        {depth >= 60 && (
-                            <>
-                                <mesh position={[width / 3, y, 0]}>
-                                    <boxGeometry args={[2, 4, depth]} />
-                                    <meshStandardMaterial color="#cbd5e1" />
-                                </mesh>
-                                <mesh position={[2 * width / 3, y, 0]}>
-                                    <boxGeometry args={[2, 4, depth]} />
-                                    <meshStandardMaterial color="#cbd5e1" />
-                                </mesh>
-                            </>
-                        )}
+                // Render Levels
+                const levelsRender = levels.map(level => {
+                    const y = level.elevation;
+                    return (
+                        <group key={level.id}>
+                            {/* Front Beam */}
+                            <Beam width={width} y={y} z={depth / 2} />
+                            {/* Back Beam */}
+                            <Beam width={width} y={y} z={-depth / 2} />
+
+                            {/* Shelf Surface */}
+                            <Shelf
+                                width={width}
+                                depth={depth}
+                                y={y}
+                                material={level.material}
+                            />
+
+                            {/* Supports */}
+                            {depth >= 60 && (
+                                <>
+                                    <mesh position={[width / 3 - width / 2, y, 0]}>
+                                        <boxGeometry args={[2, 4, depth]} />
+                                        <meshStandardMaterial color="#cbd5e1" />
+                                    </mesh>
+                                    <mesh position={[2 * width / 3 - width / 2, y, 0]}>
+                                        <boxGeometry args={[2, 4, depth]} />
+                                        <meshStandardMaterial color="#cbd5e1" />
+                                    </mesh>
+                                </>
+                            )}
+                        </group>
+                    );
+                });
+
+                // Render Right Frame for this module (which acts as Left Frame for next)
+                const rightFrameX = currentX + width + UPRIGHT_WIDTH;
+
+                const moduleRender = (
+                    <group key={module.id} position={[0, 0, 0]}>
+                        {/* Translate content to module location */}
+                        <group position={[moduleCenterX, 0, 0]}>
+                            {levelsRender}
+                        </group>
+
+                        {/* Right Upright */}
+                        <group position={[rightFrameX, 0, 0]}>
+                            <Upright height={height} x={-UPRIGHT_WIDTH / 2} z={depth / 2} />
+                            <Upright height={height} x={-UPRIGHT_WIDTH / 2} z={-depth / 2} />
+                        </group>
                     </group>
-                )
+                );
+
+                // Advance X
+                currentX += width + UPRIGHT_WIDTH;
+
+                return moduleRender;
             })}
         </group>
     );
@@ -137,7 +169,7 @@ const RackModel = () => {
 export const Viewer3D = () => {
     return (
         <div className="h-full w-full bg-gray-100">
-            <Canvas shadows camera={{ position: [200, 200, 200], fov: 50 }} gl={{ preserveDrawingBuffer: true }}>
+            <Canvas shadows camera={{ position: [500, 400, 500], fov: 50, far: 20000 }} gl={{ preserveDrawingBuffer: true }}>
                 <Suspense fallback={null}>
                     <Stage environment="city" intensity={0.5} adjustCamera={false}>
                         <RackModel />
@@ -148,11 +180,11 @@ export const Viewer3D = () => {
                         infiniteGrid
                         cellSize={50}
                         sectionSize={100}
-                        fadeDistance={1000}
+                        fadeDistance={5000}
                         cellColor="#cbd5e1"
                         sectionColor="#64748b"
                     />
-                    <OrbitControls makeDefault />
+                    <OrbitControls makeDefault maxDistance={5000} minDistance={50} />
                 </Suspense>
 
                 <GizmoHelper alignment="bottom-right" margin={[80, 80]}>

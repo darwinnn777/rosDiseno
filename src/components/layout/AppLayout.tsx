@@ -8,10 +8,7 @@ export const AppLayout = ({ children, sidebar }: { children: ReactNode; sidebar:
             {/* Header */}
             <header className="flex h-16 items-center justify-between border-b bg-white px-6 shadow-sm z-10">
                 <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded bg-brand-orange text-white font-bold">
-                        RS
-                    </div>
-                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Rosiberia <span className="text-gray-500 font-normal">Configurator</span></h1>
+                    <img src="/logoRos.png" alt="Rosiberia" className="h-10 w-auto" />
                 </div>
                 <HeaderActions />
             </header>
